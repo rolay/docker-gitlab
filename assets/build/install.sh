@@ -14,6 +14,21 @@ RUBY_SRC_URL=https://cache.ruby-lang.org/pub/ruby/${RUBY_VERSION%.*}/ruby-${RUBY
 
 GEM_CACHE_DIR="${GITLAB_BUILD_DIR}/cache"
 
+# check system architecture
+case "$(uname -m)" in
+  "x86_64")
+    SYSTEM_ARCHITECTURE_NAME="amd64"
+    ;;
+  "aarch64")
+    SYSTEM_ARCHITECTURE_NAME="arm64"
+    ;;
+  *)
+    echo "The architecture not supported ("$(uname -a)")"
+    exit 1
+esac
+
+GOLANG_ARCHIVE="go${GOLANG_VERSION}.linux-${SYSTEM_ARCHITECTURE_NAME}.tar.gz"
+
 GOROOT=/tmp/go
 PATH=${GOROOT}/bin:$PATH
 
@@ -91,9 +106,9 @@ GITLAB_SHELL_VERSION=${GITLAB_SHELL_VERSION:-$(cat ${GITLAB_INSTALL_DIR}/GITLAB_
 GITLAB_PAGES_VERSION=${GITLAB_PAGES_VERSION:-$(cat ${GITLAB_INSTALL_DIR}/GITLAB_PAGES_VERSION)}
 
 # download golang
-echo "Downloading Go ${GOLANG_VERSION}..."
-wget -cnv https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-amd64.tar.gz -P ${GITLAB_BUILD_DIR}/
-tar -xf ${GITLAB_BUILD_DIR}/go${GOLANG_VERSION}.linux-amd64.tar.gz -C /tmp/
+echo "Downloading Go ${GOLANG_VERSION} for ${SYSTEM_ARCHITECTURE_NAME}..."
+wget -cnv https://storage.googleapis.com/golang/${GOLANG_ARCHIVE} -P ${GITLAB_BUILD_DIR}/
+tar -xf ${GITLAB_BUILD_DIR}/${GOLANG_ARCHIVE} -C /tmp/
 
 # install gitlab-shell
 echo "Downloading gitlab-shell v.${GITLAB_SHELL_VERSION}..."
@@ -149,7 +164,7 @@ rm -rf ${GITLAB_GITALY_BUILD_DIR}
 
 # remove go
 go clean --modcache
-rm -rf ${GITLAB_BUILD_DIR}/go${GOLANG_VERSION}.linux-amd64.tar.gz ${GOROOT}
+rm -rf ${GITLAB_BUILD_DIR}/${GOLANG_ARCHIVE} ${GOROOT}
 
 # remove HSTS config from the default headers, we configure it in nginx
 exec_as_git sed -i "/headers\['Strict-Transport-Security'\]/d" ${GITLAB_INSTALL_DIR}/app/controllers/application_controller.rb
@@ -179,7 +194,9 @@ chown -R ${GITLAB_USER}: ${GITLAB_HOME}
 # gitlab.yml and database.yml are required for `assets:precompile`
 exec_as_git cp ${GITLAB_INSTALL_DIR}/config/resque.yml.example ${GITLAB_INSTALL_DIR}/config/resque.yml
 exec_as_git cp ${GITLAB_INSTALL_DIR}/config/gitlab.yml.example ${GITLAB_INSTALL_DIR}/config/gitlab.yml
-exec_as_git cp ${GITLAB_INSTALL_DIR}/config/database.yml.postgresql ${GITLAB_INSTALL_DIR}/config/database.yml
+#exec_as_git cp ${GITLAB_INSTALL_DIR}/config/database.yml.postgresql ${GITLAB_INSTALL_DIR}/config/database.yml
+cp ${GITLAB_INSTALL_DIR}/config/database.yml.postgresql ${GITLAB_INSTALL_DIR}/config/database.yml
+chown ${GITLAB_USER}: ${GITLAB_INSTALL_DIR}/config/database.yml
 
 # Installs nodejs packages required to compile webpack
 exec_as_git yarn install --production --pure-lockfile
